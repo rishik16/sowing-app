@@ -20,7 +20,7 @@ def get_best_sowing_month(data):
     return months[sowing_index]
 
 # UI
-st.title("🌱 Sowing Recommendation App")
+st.title("🌱 Sowing Recommendation App (Developed by RBU MBA students)")
 
 vegetable = st.text_input("Enter vegetable (tomato/potato/onion)")
 
