@@ -1,6 +1,15 @@
 import streamlit as st
+import requests
 
-# Dummy historical price data (₹/kg monthly avg simplified)
+# -------------------------------
+# CONFIG
+# -------------------------------
+API_KEY = "bfe85d836e312b4bf32a886bc8fa4433"
+CITY = "Nashik"
+
+# -------------------------------
+# PRICE DATA (dummy monthly avg)
+# -------------------------------
 price_data = {
     "tomato": [10, 12, 15, 20, 25, 40, 60, 80, 50, 30, 20, 15],
     "potato": [20, 18, 17, 16, 15, 14, 15, 16, 18, 20, 22, 24],
@@ -12,22 +21,81 @@ months = [
     "Jul","Aug","Sep","Oct","Nov","Dec"
 ]
 
-def get_best_sowing_month(data):
+# Crop duration (months approx)
+crop_duration = {
+    "tomato": 2,
+    "potato": 3,
+    "onion": 3
+}
+
+# -------------------------------
+# FUNCTIONS
+# -------------------------------
+
+def get_weather():
+    url = f"http://api.openweathermap.org/data/2.5/weather?q={CITY}&appid={API_KEY}&units=metric"
+    response = requests.get(url)
+    data = response.json()
+    
+    temp = data["main"]["temp"]
+    humidity = data["main"]["humidity"]
+    
+    return temp, humidity
+
+
+def get_best_sowing_month(veg):
+    data = price_data[veg]
     max_price = max(data)
-    index = data.index(max_price)
-    # Assume harvest after 2 months
-    sowing_index = (index - 2) % 12
-    return months[sowing_index]
+    peak_index = data.index(max_price)
+    
+    sowing_index = (peak_index - crop_duration[veg]) % 12
+    return months[sowing_index], months[peak_index]
 
-# UI
-st.title("🌱 Sowing Recommendation App (Developed by RBU MBA students)")
 
-vegetable = st.text_input("Enter vegetable (tomato/potato/onion)")
+def weather_check(veg, temp):
+    if veg == "tomato":
+        return 20 <= temp <= 30
+    elif veg == "potato":
+        return 15 <= temp <= 25
+    elif veg == "onion":
+        return 18 <= temp <= 30
+    return False
+
+
+# -------------------------------
+# STREAMLIT UI
+# -------------------------------
+
+st.title("🌱 Smart Vegetable Sowing App")
+
+veg = st.selectbox("Select Vegetable", ["tomato", "potato", "onion"])
 
 if st.button("Get Recommendation"):
-    veg = vegetable.lower()
-    if veg not in price_data:
-        st.error("Vegetable not found. Try tomato, potato, onion.")
+    
+    # Get weather
+    temp, humidity = get_weather()
+    
+    # Get price-based suggestion
+    sow_month, peak_month = get_best_sowing_month(veg)
+    
+    # Weather check
+    suitable = weather_check(veg, temp)
+    
+    # -------------------------------
+    # OUTPUT
+    # -------------------------------
+    
+    st.subheader("📊 Weather Conditions")
+    st.write(f"🌡 Temperature: {temp} °C")
+    st.write(f"💧 Humidity: {humidity} %")
+    
+    st.subheader("📈 Price Insight")
+    st.write(f"💰 Expected high price month: {peak_month}")
+    
+    st.subheader("🌱 Recommendation")
+    
+    if suitable:
+        st.success(f"✅ Best sowing month: {sow_month}")
     else:
-        best_month = get_best_sowing_month(price_data[veg])
-        st.success(f"Best sowing month for {veg} is {best_month}")
+        st.error(f"❌ Weather not suitable now for {veg}")
+        st.warning("👉 Wait for better temperature conditions")
