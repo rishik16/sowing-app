@@ -5,7 +5,7 @@ import requests
 # CONFIG
 # -------------------------------
 API_KEY = "bfe85d836e312b4bf32a886bc8fa4433"   # ⚠️ Replace later for safety
-CITY = "Nashik"
+CITY = "Nagpur"
 
 # -------------------------------
 # PRICE DATA
