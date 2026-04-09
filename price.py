@@ -1,10 +1,11 @@
 # =========================================
-# 🌱 SMART FARMING ASSISTANT (FINAL CLEAN)
+# 🌱 SMART FARMING ASSISTANT (FINAL)
 # =========================================
 
 import streamlit as st
 import requests
 import numpy as np
+import pandas as pd
 from sklearn.linear_model import LinearRegression
 
 # =========================================
@@ -127,22 +128,32 @@ if st.button("🚀 Get Smart Recommendation"):
 
     prices = price_data[veg]
 
-    # ✅ SHOW MONTH-WISE DATA
     for month, price in zip(months, prices):
         st.write(f"{month} : ₹{price}")
 
     st.markdown("---")
 
     # -------- AI PREDICTION --------
-    st.subheader("🤖 Next 3 Months Prediction")
+    st.subheader("🤖 Price Prediction")
 
     preds = predict_prices(prices)
 
     for i, p in enumerate(preds, 1):
-        st.write(f"Month +{i}: ₹{round(p,2)}")
+        st.write(f"Next Month {i}: ₹{round(p,2)}")
 
-    # Chart
-    st.line_chart(prices + list(preds))
+    # =========================================
+    # 📈 CHART WITH MONTH LABELS (FIXED)
+    # =========================================
+
+    future_months = ["Next 1", "Next 2", "Next 3"]
+    all_months = months + future_months
+    all_prices = prices + list(preds)
+
+    df = pd.DataFrame({
+        "Price": all_prices
+    }, index=all_months)
+
+    st.line_chart(df)
 
     st.markdown("---")
 
