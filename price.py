@@ -1,109 +1,158 @@
+# =========================================
+# 🌱 SMART FARMING ASSISTANT (FINAL CLEAN)
+# =========================================
+
 import streamlit as st
 import requests
+import numpy as np
+from sklearn.linear_model import LinearRegression
 
-# -------------------------------
-# CONFIG
-# -------------------------------
-API_KEY = "bfe85d836e312b4bf32a886bc8fa4433"   # ⚠️ Replace later for safety
-CITY = "Nagpur"
+# =========================================
+# ✅ WEATHER API KEY
+# =========================================
+WEATHER_API_KEY = "bfe85d836e312b4bf32a886bc8fa4433"
 
-# -------------------------------
-# PRICE DATA
-# -------------------------------
-price_data = {
-    "tomato": [10, 12, 15, 20, 25, 40, 60, 80, 50, 30, 20, 15],
-    "potato": [20, 18, 17, 16, 15, 14, 15, 16, 18, 20, 22, 24],
-    "onion": [15, 18, 20, 25, 30, 35, 50, 70, 60, 40, 30, 20],
+# =========================================
+# 🎨 UI CONFIG
+# =========================================
+st.set_page_config(page_title="Smart Farming", layout="wide")
+st.title("🌱 Smart Farming Assistant")
+
+# =========================================
+# 🌍 LOCATION INPUT
+# =========================================
+state_districts = {
+    "Maharashtra": ["Nashik", "Pune", "Nagpur", "Mumbai"],
+    "Gujarat": ["Ahmedabad", "Surat"],
+    "Karnataka": ["Bangalore", "Mysore"],
 }
 
+col1, col2, col3 = st.columns(3)
+
+with col1:
+    state = st.selectbox("🌍 State", list(state_districts.keys()))
+
+with col2:
+    district = st.selectbox("🏙 District", state_districts[state])
+
+with col3:
+    city = st.text_input("📍 City", district)
+
+veg = st.selectbox("🥦 Vegetable", ["Tomato", "Potato", "Onion"])
+
+# =========================================
+# 📅 MONTH NAMES
+# =========================================
 months = [
-    "Jan","Feb","Mar","Apr","May","Jun",
-    "Jul","Aug","Sep","Oct","Nov","Dec"
+    "January", "February", "March", "April",
+    "May", "June", "July", "August",
+    "September", "October", "November", "December"
 ]
 
-crop_duration = {
-    "tomato": 2,
-    "potato": 3,
-    "onion": 3
+# =========================================
+# 📊 PRICE DATA
+# =========================================
+price_data = {
+    "Tomato": [10, 12, 15, 20, 25, 40, 60, 80, 50, 30, 20, 15],
+    "Potato": [20, 18, 17, 16, 15, 14, 15, 16, 18, 20, 22, 24],
+    "Onion": [15, 18, 20, 25, 30, 35, 50, 70, 60, 40, 30, 20],
 }
 
-# -------------------------------
-# FUNCTIONS
-# -------------------------------
-
-def get_weather():
+# =========================================
+# 🌦 WEATHER FUNCTION
+# =========================================
+def get_weather(city):
     try:
-        url = f"http://api.openweathermap.org/data/2.5/weather?q={CITY}&appid={API_KEY}&units=metric"
-        response = requests.get(url, timeout=5)
-        data = response.json()
+        url = f"http://api.openweathermap.org/data/2.5/weather?q={city}&appid={WEATHER_API_KEY}&units=metric"
+        res = requests.get(url)
+        data = res.json()
 
         if "main" not in data:
-            return None, None, data.get("message", "API error")
+            return None, None, "Weather API error"
 
-        temp = data["main"]["temp"]
-        humidity = data["main"]["humidity"]
+        return data["main"]["temp"], data["main"]["humidity"], None
+    except:
+        return None, None, "Weather error"
 
-        return temp, humidity, None
+# =========================================
+# 🤖 AI MODEL
+# =========================================
+def predict_prices(prices):
+    X = np.array(range(len(prices))).reshape(-1, 1)
+    y = np.array(prices)
 
-    except Exception as e:
-        return None, None, str(e)
+    model = LinearRegression()
+    model.fit(X, y)
 
+    future = np.array(range(len(prices), len(prices)+3)).reshape(-1, 1)
+    return model.predict(future)
 
-def get_best_sowing_month(veg):
-    data = price_data[veg]
-    max_price = max(data)
-    peak_index = data.index(max_price)
-
-    sowing_index = (peak_index - crop_duration[veg]) % 12
-
-    return months[sowing_index], months[peak_index]
-
-
+# =========================================
+# 🌱 WEATHER CHECK
+# =========================================
 def weather_check(veg, temp):
     if temp is None:
         return False
 
-    if veg == "tomato":
+    if veg == "Tomato":
         return 20 <= temp <= 30
-    elif veg == "potato":
+    elif veg == "Potato":
         return 15 <= temp <= 25
-    elif veg == "onion":
+    elif veg == "Onion":
         return 18 <= temp <= 30
 
     return False
 
+# =========================================
+# 🚀 BUTTON ACTION
+# =========================================
+if st.button("🚀 Get Smart Recommendation"):
 
-# -------------------------------
-# STREAMLIT UI
-# -------------------------------
+    # -------- WEATHER --------
+    st.subheader("🌦 Weather Overview")
 
-st.title("🌱 Smart Vegetable Sowing App(By RBU Nagpur MBA Students)")
+    temp, humidity, err = get_weather(city)
 
-veg = st.selectbox("Select Vegetable", ["tomato", "potato", "onion"])
-
-if st.button("Get Recommendation"):
-
-    temp, humidity, error = get_weather()
-    sow_month, peak_month = get_best_sowing_month(veg)
-
-    st.subheader("📈 Price Insight")
-    st.write(f"💰 Expected high price month: {peak_month}")
-    st.write(f"🌱 Suggested sowing month: {sow_month}")
-
-    st.subheader("🌦 Weather Conditions")
-
-    if error:
-        st.error(f"⚠️ API Error: {error}")
+    if err:
+        st.error(err)
     else:
-        st.write(f"🌡 Temperature: {temp} °C")
-        st.write(f"💧 Humidity: {humidity} %")
+        c1, c2 = st.columns(2)
+        c1.metric("🌡 Temperature", f"{temp} °C")
+        c2.metric("💧 Humidity", f"{humidity} %")
 
-        suitable = weather_check(veg, temp)
+    st.markdown("---")
 
-        st.subheader("✅ Final Recommendation")
+    # -------- PRICE DATA --------
+    st.subheader("📊 Last 12 Months Prices")
 
-        if suitable:
-            st.success(f"👍 Good time to sow {veg} in {sow_month}")
+    prices = price_data[veg]
+
+    # ✅ SHOW MONTH-WISE DATA
+    for month, price in zip(months, prices):
+        st.write(f"{month} : ₹{price}")
+
+    st.markdown("---")
+
+    # -------- AI PREDICTION --------
+    st.subheader("🤖 Next 3 Months Prediction")
+
+    preds = predict_prices(prices)
+
+    for i, p in enumerate(preds, 1):
+        st.write(f"Month +{i}: ₹{round(p,2)}")
+
+    # Chart
+    st.line_chart(prices + list(preds))
+
+    st.markdown("---")
+
+    # -------- FINAL --------
+    st.subheader("🌱 Final Recommendation")
+
+    if temp:
+        if weather_check(veg, temp):
+            st.success(f"✅ Good time to grow {veg}")
         else:
             st.error(f"❌ Weather not suitable for {veg}")
-            st.info("👉 Wait for better conditions")
+    else:
+        st.warning("Weather data not available")
