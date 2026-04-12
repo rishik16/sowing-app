@@ -1,202 +1,169 @@
+# =========================================
+# 🌱 SMART FARMING ASSISTANT (ML VERSION)
+# =========================================
+
 import streamlit as st
 import requests
 import numpy as np
-import pandas as pd
 from sklearn.linear_model import LinearRegression
+from sklearn.tree import DecisionTreeClassifier
+from sklearn.preprocessing import LabelEncoder
 
-# -------------------------------
-# CONFIG
-# -------------------------------
+# =========================================
+# 🔑 API KEYS
+# =========================================
 WEATHER_API_KEY = "bfe85d836e312b4bf32a886bc8fa4433"
-CITY = "Nashik"
+MANDI_API_KEY = "579b464db66ec23bdd000001cf1ffff34623416e485cb74e3ce6a4c7"
 
-# -------------------------------
-# DISTRICTS
-# -------------------------------
-districts = [
-    "Nashik", "Pune", "Mumbai", "Nagpur", "Ahmednagar",
-    "Solapur", "Kolhapur", "Satara", "Jalgaon", "Aurangabad"
+# =========================================
+# 📍 LOCAL MANDIS
+# =========================================
+maharashtra_mandis = {
+    "Nashik": ["Lasalgaon", "Nashik", "Pimpalgaon"],
+    "Pune": ["Pune Market Yard", "Baramati", "Shirur"],
+    "Nagpur": ["Nagpur", "Kalmeshwar", "Kamptee"],
+}
+
+# =========================================
+# 🌱 CROP ROTATION DATASET (TRAINING DATA)
+# =========================================
+data = [
+    ("Wheat", "Legumes"),
+    ("Wheat", "Maize"),
+    ("Rice", "Pulses"),
+    ("Rice", "Vegetables"),
+    ("Sugarcane", "Wheat"),
+    ("Sugarcane", "Pulses"),
+    ("Cotton", "Groundnut"),
+    ("Cotton", "Wheat"),
+    ("Tomato", "Onion"),
+    ("Potato", "Peas"),
+    ("Onion", "Soybean"),
 ]
 
-# -------------------------------
-# MANDI LOCATIONS
-# -------------------------------
-mandi_locations = {
-    "Nashik": [
-        {"name": "Lasalgaon APMC", "map": "https://maps.google.com/?q=Lasalgaon+APMC"},
-        {"name": "Pimpalgaon Baswant APMC", "map": "https://maps.google.com/?q=Pimpalgaon+Baswant+APMC"}
-    ],
-    "Pune": [
-        {"name": "Pune Market Yard APMC", "map": "https://maps.google.com/?q=Pune+APMC"},
-        {"name": "Chakan Mandi", "map": "https://maps.google.com/?q=Chakan+Mandi"}
-    ],
-    "Mumbai": [
-        {"name": "Vashi APMC", "map": "https://maps.google.com/?q=Vashi+APMC"}
-    ],
-    "Nagpur": [
-        {"name": "Kalamna APMC", "map": "https://maps.google.com/?q=Kalamna+APMC"}
-    ],
-    "Ahmednagar": [
-        {"name": "Ahmednagar APMC", "map": "https://maps.google.com/?q=Ahmednagar+APMC"}
-    ],
-    "Solapur": [
-        {"name": "Solapur APMC", "map": "https://maps.google.com/?q=Solapur+APMC"}
-    ],
-    "Kolhapur": [
-        {"name": "Kolhapur APMC", "map": "https://maps.google.com/?q=Kolhapur+APMC"}
-    ],
-    "Satara": [
-        {"name": "Satara APMC", "map": "https://maps.google.com/?q=Satara+APMC"}
-    ],
-    "Jalgaon": [
-        {"name": "Jalgaon APMC", "map": "https://maps.google.com/?q=Jalgaon+APMC"}
-    ],
-    "Aurangabad": [
-        {"name": "Aurangabad APMC", "map": "https://maps.google.com/?q=Aurangabad+APMC"}
-    ]
-}
+# =========================================
+# 🤖 TRAIN ML MODEL
+# =========================================
+le_input = LabelEncoder()
+le_output = LabelEncoder()
 
-# -------------------------------
-# PRICE DATA
-# -------------------------------
-price_data = {
-    "tomato": [10, 12, 15, 20, 25, 40, 60, 80, 50, 30, 20, 15],
-    "potato": [20, 18, 17, 16, 15, 14, 15, 16, 18, 20, 22, 24],
-    "onion": [15, 18, 20, 25, 30, 35, 50, 70, 60, 40, 30, 20],
-}
+X = [d[0] for d in data]
+y = [d[1] for d in data]
 
-months = ["Jan","Feb","Mar","Apr","May","Jun","Jul","Aug","Sep","Oct","Nov","Dec"]
+X_encoded = le_input.fit_transform(X).reshape(-1, 1)
+y_encoded = le_output.fit_transform(y)
 
-crop_duration = {
-    "tomato": 2,
-    "potato": 3,
-    "onion": 3
-}
+model_crop = DecisionTreeClassifier()
+model_crop.fit(X_encoded, y_encoded)
 
-# -------------------------------
-# FUNCTIONS
-# -------------------------------
+# =========================================
+# 🌍 UI
+# =========================================
+st.title("🌱 Smart Farming Assistant (AI + ML)")
 
-def get_weather():
-    try:
-        url = f"http://api.openweathermap.org/data/2.5/weather?q={CITY}&appid={WEATHER_API_KEY}&units=metric"
-        data = requests.get(url).json()
+state = st.selectbox("State", ["Maharashtra"])
+district = st.text_input("District", "Nashik")
+city = st.text_input("City", "Nashik")
 
-        if "main" not in data:
-            return None, None, "Weather API error"
+veg = st.selectbox("Vegetable", ["Tomato", "Potato", "Onion"])
 
-        return data["main"]["temp"], data["main"]["humidity"], None
+# 🌱 Crop rotation input
+previous_crop = st.text_input("Previous Crop")
 
-    except:
-        return None, None, "Connection error"
+# =========================================
+# 🌦 WEATHER
+# =========================================
+def get_weather(city):
+    url = f"http://api.openweathermap.org/data/2.5/weather?q={city}&appid={WEATHER_API_KEY}&units=metric"
+    data = requests.get(url).json()
 
+    if "main" not in data:
+        return None, None
 
-def get_best_sowing_month(veg):
-    data = price_data[veg]
-    peak_index = data.index(max(data))
-    sowing_index = (peak_index - crop_duration[veg]) % 12
-    return months[sowing_index], months[peak_index], peak_index
+    return data["main"]["temp"], data["main"]["humidity"]
 
+# =========================================
+# 📊 MANDI DATA
+# =========================================
+def get_mandi_data(commodity, state, district):
+    district = district.strip().title()
 
-def weather_check(veg, temp):
-    if temp is None:
-        return False
+    url = (
+        "https://api.data.gov.in/resource/"
+        "9ef84268-d588-465a-a308-a864a43d0070"
+        f"?api-key={MANDI_API_KEY}"
+        f"&format=json&limit=50"
+        f"&filters[state]={state}"
+        f"&filters[commodity]={commodity}"
+    )
 
-    conditions = {
-        "tomato": (20, 30),
-        "potato": (15, 25),
-        "onion": (18, 30)
-    }
+    data = requests.get(url).json()
+    records = data.get("records", [])
 
-    min_t, max_t = conditions[veg]
-    return min_t <= temp <= max_t
+    mandi_info = []
+    for r in records:
+        if r.get("modal_price") and r.get("market"):
+            mandi_info.append({
+                "market": r["market"],
+                "price": int(r["modal_price"])
+            })
 
+    return mandi_info if mandi_info else None
 
-def predict_prices(veg):
-    X = np.array(range(12)).reshape(-1, 1)
-    y = np.array(price_data[veg])
-
-    model = LinearRegression()
-    model.fit(X, y)
-
-    future = np.array([12, 13, 14]).reshape(-1, 1)
+# =========================================
+# 🤖 AI PRICE PREDICTION
+# =========================================
+def predict_prices(prices):
+    X = np.arange(len(prices)).reshape(-1, 1)
+    model = LinearRegression().fit(X, prices)
+    future = np.arange(len(prices), len(prices)+3).reshape(-1, 1)
     return model.predict(future)
 
+# =========================================
+# 🌱 ML CROP ROTATION PREDICTION
+# =========================================
+def predict_next_crop(prev_crop):
+    try:
+        encoded = le_input.transform([prev_crop])[0]
+        pred = model_crop.predict([[encoded]])
+        return le_output.inverse_transform(pred)[0]
+    except:
+        return "No data available"
 
-# -------------------------------
-# STREAMLIT UI
-# -------------------------------
-
-st.title("🌱 Smart Vegetable Sowing App")
-
-veg = st.selectbox("Select Vegetable", ["tomato", "potato", "onion"])
-district = st.selectbox("Select District", districts)
-
+# =========================================
+# 🚀 MAIN
+# =========================================
 if st.button("Get Recommendation"):
 
-    # PRICE INSIGHT
-    sow, peak, peak_index = get_best_sowing_month(veg)
+    # 🌦 WEATHER
+    temp, hum = get_weather(city)
+    st.write(f"🌡 Temp: {temp} °C | 💧 Humidity: {hum}%")
 
-    st.subheader("📈 Price Insight")
-    st.write(f"💰 Peak price month: {peak}")
-    st.write(f"🌱 Best sowing month: {sow}")
+    # 📊 MANDI
+    mandi = get_mandi_data(veg, state, district)
 
-    # WEATHER
-    temp, humidity, error = get_weather()
+    if mandi:
+        for m in mandi[:5]:
+            st.write(f"{m['market']} → ₹{m['price']}")
 
-    st.subheader("🌦 Weather")
+        prices = [m["price"] for m in mandi]
 
-    if error:
-        st.error(error)
+        # 🤖 Price Prediction
+        preds = predict_prices(prices)
+        st.subheader("AI Price Prediction")
+        for i, p in enumerate(preds, 1):
+            st.write(f"Month +{i}: ₹{round(p,2)}")
+
+        st.line_chart(prices + list(preds))
+
     else:
-        st.write(f"🌡 Temperature: {temp} °C")
-        st.write(f"💧 Humidity: {humidity}%")
+        st.write("No mandi data")
 
-        if weather_check(veg, temp):
-            st.success("✅ Good time to sow")
-        else:
-            st.error("❌ Not suitable currently")
+    # 🌱 Crop Rotation ML
+    st.subheader("🌱 Crop Rotation (ML Based)")
 
-    # AI PREDICTION
-    st.subheader("🤖 Price Prediction (Next 3 Months)")
-
-    preds = predict_prices(veg)
-
-    future_months = [
-        months[(peak_index + i + 1) % 12]
-        for i in range(3)
-    ]
-
-    for m, p in zip(future_months, preds):
-        st.write(f"📅 {m}: ₹{round(p,2)}")
-
-    # -------------------------------
-    # FIXED GRAPH WITH MONTH NAMES
-    # -------------------------------
-    st.subheader("📊 Price Trend")
-
-    all_months = months + future_months
-    all_prices = price_data[veg] + list(preds)
-
-    df = pd.DataFrame({
-        "Month": all_months,
-        "Price": all_prices
-    })
-
-    df.set_index("Month", inplace=True)
-    st.line_chart(df)
-
-    # -------------------------------
-    # MANDI LOCATIONS
-    # -------------------------------
-    st.subheader("📍 Nearby Mandi Locations")
-
-    mandis = mandi_locations.get(district, [])
-
-    if not mandis:
-        st.warning("No mandi data available")
+    if previous_crop:
+        next_crop = predict_next_crop(previous_crop.title())
+        st.success(f"Recommended Next Crop: {next_crop}")
     else:
-        for mandi in mandis:
-            st.write(f"🏪 {mandi['name']}")
-            st.markdown(f"[📌 View on Map]({mandi['map']})")
-            st.write("---")
+        st.info("Enter previous crop")
