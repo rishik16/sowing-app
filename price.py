@@ -1,10 +1,12 @@
 # =========================================
-# 🌱 SMART FARMING ASSISTANT (ML VERSION)
+# 🌱 SMART FARMING ASSISTANT (FINAL ML VERSION)
 # =========================================
 
 import streamlit as st
 import requests
 import numpy as np
+import pandas as pd
+import datetime
 from sklearn.linear_model import LinearRegression
 from sklearn.tree import DecisionTreeClassifier
 from sklearn.preprocessing import LabelEncoder
@@ -25,7 +27,7 @@ maharashtra_mandis = {
 }
 
 # =========================================
-# 🌱 CROP ROTATION DATASET (TRAINING DATA)
+# 🌱 CROP ROTATION DATASET (ML TRAINING)
 # =========================================
 data = [
     ("Wheat", "Legumes"),
@@ -67,51 +69,70 @@ city = st.text_input("City", "Nashik")
 
 veg = st.selectbox("Vegetable", ["Tomato", "Potato", "Onion"])
 
-# 🌱 Crop rotation input
 previous_crop = st.text_input("Previous Crop")
 
 # =========================================
 # 🌦 WEATHER
 # =========================================
 def get_weather(city):
-    url = f"http://api.openweathermap.org/data/2.5/weather?q={city}&appid={WEATHER_API_KEY}&units=metric"
-    data = requests.get(url).json()
+    try:
+        url = f"http://api.openweathermap.org/data/2.5/weather?q={city}&appid={WEATHER_API_KEY}&units=metric"
+        data = requests.get(url).json()
 
-    if "main" not in data:
+        if "main" not in data:
+            return None, None
+
+        return data["main"]["temp"], data["main"]["humidity"]
+    except:
         return None, None
 
-    return data["main"]["temp"], data["main"]["humidity"]
-
 # =========================================
-# 📊 MANDI DATA
+# 📊 MANDI DATA (WITH FALLBACK)
 # =========================================
 def get_mandi_data(commodity, state, district):
-    district = district.strip().title()
+    try:
+        district = district.strip().title()
 
-    url = (
-        "https://api.data.gov.in/resource/"
-        "9ef84268-d588-465a-a308-a864a43d0070"
-        f"?api-key={MANDI_API_KEY}"
-        f"&format=json&limit=50"
-        f"&filters[state]={state}"
-        f"&filters[commodity]={commodity}"
-    )
+        url = (
+            "https://api.data.gov.in/resource/"
+            "9ef84268-d588-465a-a308-a864a43d0070"
+            f"?api-key={MANDI_API_KEY}"
+            f"&format=json&limit=50"
+            f"&filters[state]={state}"
+            f"&filters[district]={district}"
+            f"&filters[commodity]={commodity}"
+        )
 
-    data = requests.get(url).json()
-    records = data.get("records", [])
+        data = requests.get(url).json()
+        records = data.get("records", [])
 
-    mandi_info = []
-    for r in records:
-        if r.get("modal_price") and r.get("market"):
-            mandi_info.append({
-                "market": r["market"],
-                "price": int(r["modal_price"])
-            })
+        # fallback
+        if not records:
+            url = (
+                "https://api.data.gov.in/resource/"
+                "9ef84268-d588-465a-a308-a864a43d0070"
+                f"?api-key={MANDI_API_KEY}"
+                f"&format=json&limit=50"
+                f"&filters[state]={state}"
+                f"&filters[commodity]={commodity}"
+            )
+            data = requests.get(url).json()
+            records = data.get("records", [])
 
-    return mandi_info if mandi_info else None
+        mandi_info = []
+        for r in records:
+            if r.get("modal_price") and r.get("market"):
+                mandi_info.append({
+                    "market": r["market"],
+                    "price": int(r["modal_price"])
+                })
+
+        return mandi_info if mandi_info else None
+    except:
+        return None
 
 # =========================================
-# 🤖 AI PRICE PREDICTION
+# 🤖 PRICE PREDICTION
 # =========================================
 def predict_prices(prices):
     X = np.arange(len(prices)).reshape(-1, 1)
@@ -120,50 +141,93 @@ def predict_prices(prices):
     return model.predict(future)
 
 # =========================================
-# 🌱 ML CROP ROTATION PREDICTION
+# 🌱 ML CROP ROTATION + REASON
 # =========================================
-def predict_next_crop(prev_crop):
+def predict_next_crop_with_reason(prev_crop):
     try:
         encoded = le_input.transform([prev_crop])[0]
         pred = model_crop.predict([[encoded]])
-        return le_output.inverse_transform(pred)[0]
+        next_crop = le_output.inverse_transform(pred)[0]
+
+        reasons = {
+            "Legumes": "Fix nitrogen in soil and improve fertility",
+            "Maize": "Balances nutrients after heavy crops",
+            "Pulses": "Restore soil nutrients naturally",
+            "Vegetables": "Short duration and high profit crop",
+            "Groundnut": "Improves soil structure and nitrogen",
+            "Soybean": "Enhances nitrogen content in soil",
+            "Peas": "Excellent nitrogen fixing crop"
+        }
+
+        reason = reasons.get(next_crop, "Improves soil health and yield")
+
+        return next_crop, reason
     except:
-        return "No data available"
+        return "No data", "No reason available"
 
 # =========================================
-# 🚀 MAIN
+# 🚀 MAIN BUTTON
 # =========================================
 if st.button("Get Recommendation"):
 
     # 🌦 WEATHER
+    st.subheader("🌦 Weather")
     temp, hum = get_weather(city)
-    st.write(f"🌡 Temp: {temp} °C | 💧 Humidity: {hum}%")
 
-    # 📊 MANDI
+    if temp:
+        st.write(f"🌡 Temp: {temp} °C | 💧 Humidity: {hum}%")
+    else:
+        st.warning("Weather data not available")
+
+    # 📊 MANDI DATA
+    st.subheader("📊 Live Mandi Prices")
     mandi = get_mandi_data(veg, state, district)
 
     if mandi:
         for m in mandi[:5]:
-            st.write(f"{m['market']} → ₹{m['price']}")
+            st.write(f"📍 {m['market']} → ₹{m['price']}")
 
         prices = [m["price"] for m in mandi]
 
-        # 🤖 Price Prediction
-        preds = predict_prices(prices)
-        st.subheader("AI Price Prediction")
-        for i, p in enumerate(preds, 1):
-            st.write(f"Month +{i}: ₹{round(p,2)}")
+        # 🤖 Prediction with REAL MONTH NAMES
+        st.subheader("🤖 AI Price Prediction")
 
-        st.line_chart(prices + list(preds))
+        preds = predict_prices(prices)
+
+        current_month = datetime.datetime.now().month
+
+        month_names = [
+            "January","February","March","April","May","June",
+            "July","August","September","October","November","December"
+        ]
+
+        for i, p in enumerate(preds, 1):
+            future_month = month_names[(current_month + i - 1) % 12]
+            st.write(f"{future_month}: ₹{round(p,2)}")
+
+        # 📊 WEEK BASED GRAPH
+        weeks = list(range(1, len(prices) + len(preds) + 1))
+
+        df = pd.DataFrame({
+            "Week": weeks,
+            "Price": prices + list(preds)
+        })
+
+        df.set_index("Week", inplace=True)
+
+        st.subheader("📊 Price Trend (Weekly)")
+        st.line_chart(df)
 
     else:
-        st.write("No mandi data")
+        st.error("No mandi data found")
 
-    # 🌱 Crop Rotation ML
+    # 🌱 CROP ROTATION ML
     st.subheader("🌱 Crop Rotation (ML Based)")
 
     if previous_crop:
-        next_crop = predict_next_crop(previous_crop.title())
-        st.success(f"Recommended Next Crop: {next_crop}")
+        crop, reason = predict_next_crop_with_reason(previous_crop.title())
+
+        st.success(f"Recommended Next Crop: {crop}")
+        st.info(f"🌾 Reason: {reason}")
     else:
         st.info("Enter previous crop")
