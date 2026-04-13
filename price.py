@@ -1,5 +1,5 @@
 # =========================================
-# 🌱 SMART FARMING ASSISTANT (HYBRID AI)
+# 🌱 SMART FARMING ASSISTANT (MOBILE READY)
 # =========================================
 
 import streamlit as st
@@ -12,6 +12,15 @@ from sklearn.tree import DecisionTreeClassifier
 from sklearn.preprocessing import LabelEncoder
 
 # =========================================
+# 📱 APP CONFIG (MOBILE FRIENDLY)
+# =========================================
+st.set_page_config(
+    page_title="Smart Farming App",
+    page_icon="🌱",
+    layout="centered"
+)
+
+# =========================================
 # 🔑 API KEYS
 # =========================================
 WEATHER_API_KEY = "bfe85d836e312b4bf32a886bc8fa4433"
@@ -22,12 +31,16 @@ MANDI_API_KEY = "579b464db66ec23bdd000001cf1ffff34623416e485cb74e3ce6a4c7"
 # =========================================
 @st.cache_data
 def load_dataset():
-    return pd.read_csv("mandi_data.csv")
+    try:
+        return pd.read_csv("mandi_data.csv")
+    except:
+        st.warning("⚠️ Local dataset not found, using API only")
+        return pd.DataFrame()
 
 df_local = load_dataset()
 
 # =========================================
-# 🌱 ML CROP ROTATION MODEL
+# 🌱 ML MODEL
 # =========================================
 data = [
     ("Wheat", "Legumes"),
@@ -66,7 +79,7 @@ def get_weather(city):
 # =========================================
 def get_mandi_data(commodity, state, district):
 
-    # 🔹 TRY API FIRST
+    # 🔹 TRY API
     try:
         url = (
             "https://api.data.gov.in/resource/"
@@ -94,16 +107,17 @@ def get_mandi_data(commodity, state, district):
         pass
 
     # 🔁 FALLBACK → LOCAL DATASET
-    st.warning("⚠️ Using offline dataset (API unavailable)")
+    st.warning("⚠️ Using offline dataset")
 
-    filtered = df_local[
-        (df_local["state"] == state) &
-        (df_local["district"] == district) &
-        (df_local["commodity"] == commodity)
-    ]
+    if not df_local.empty:
+        filtered = df_local[
+            (df_local["state"] == state) &
+            (df_local["district"] == district) &
+            (df_local["commodity"].str.contains(commodity, case=False))
+        ]
 
-    if not filtered.empty:
-        return filtered[["market", "price"]].to_dict(orient="records")
+        if not filtered.empty:
+            return filtered[["market", "price"]].to_dict(orient="records")
 
     return None
 
@@ -117,7 +131,7 @@ def predict_prices(prices):
     return model.predict(future)
 
 # =========================================
-# 🌱 CROP ROTATION ML
+# 🌱 ML CROP ROTATION
 # =========================================
 def predict_crop(prev):
     try:
@@ -126,27 +140,28 @@ def predict_crop(prev):
         crop = le_output.inverse_transform(pred)[0]
 
         reasons = {
-            "Legumes": "Fix nitrogen in soil",
-            "Pulses": "Restore soil nutrients",
-            "Groundnut": "Improve soil structure",
-            "Onion": "Short duration crop",
-            "Peas": "Nitrogen fixing crop",
+            "Legumes": "Fix nitrogen in soil and improve fertility",
+            "Pulses": "Restore soil nutrients naturally",
+            "Groundnut": "Improves soil structure",
+            "Onion": "Short duration profitable crop",
+            "Peas": "Excellent nitrogen fixing crop",
             "Soybean": "Enhances soil fertility"
         }
 
-        return crop, reasons.get(crop, "Improves soil")
+        return crop, reasons.get(crop, "Improves soil health")
 
     except:
-        return "Unknown", "No data"
+        return "Unknown", "No data available"
 
 # =========================================
 # 🌍 UI
 # =========================================
-st.title("🌱 Smart Farming Assistant (Hybrid AI)")
+st.title("🌱 Smart Farming Assistant")
 
 state = st.selectbox("State", ["Maharashtra"])
 district = st.text_input("District", "Nashik")
 city = st.text_input("City", "Nashik")
+
 veg = st.selectbox("Vegetable", ["Onion", "Tomato", "Potato"])
 prev_crop = st.text_input("Previous Crop")
 
@@ -156,42 +171,63 @@ prev_crop = st.text_input("Previous Crop")
 if st.button("Get Recommendation"):
 
     # 🌦 WEATHER
+    st.subheader("🌦 Weather")
     temp, hum = get_weather(city)
-    st.write(f"🌡 {temp}°C | 💧 {hum}%")
+
+    if temp:
+        st.write(f"🌡 Temp: {temp} °C | 💧 Humidity: {hum}%")
+    else:
+        st.warning("Weather data not available")
 
     # 📊 MANDI
+    st.subheader("📊 Live Mandi Prices")
     mandi = get_mandi_data(veg, state, district)
 
     if mandi:
         for m in mandi:
-            st.write(f"{m['market']} → ₹{m['price']}")
+            st.write(f"📍 {m['market']} → ₹{m['price']}")
 
         prices = [m["price"] for m in mandi]
 
+        # 🤖 PRICE PREDICTION
+        st.subheader("🤖 AI Price Prediction")
+
         preds = predict_prices(prices)
 
-        # 📅 MONTH NAMES
-        months = ["Jan","Feb","Mar","Apr","May","Jun",
-                  "Jul","Aug","Sep","Oct","Nov","Dec"]
+        month_names = [
+            "January","February","March","April","May","June",
+            "July","August","September","October","November","December"
+        ]
 
-        current = datetime.datetime.now().month
+        current_month = datetime.datetime.now().month
 
-        st.subheader("📈 Price Prediction")
         for i, p in enumerate(preds, 1):
-            st.write(f"{months[(current+i-1)%12]} → ₹{round(p,2)}")
+            future_month = month_names[(current_month + i - 1) % 12]
+            st.write(f"{future_month} → ₹{round(p,2)}")
 
         # 📊 WEEK GRAPH
-        weeks = list(range(1, len(prices)+len(preds)+1))
-        df = pd.DataFrame({"Week": weeks, "Price": prices + list(preds)})
+        weeks = list(range(1, len(prices) + len(preds) + 1))
+
+        df = pd.DataFrame({
+            "Week": weeks,
+            "Price": prices + list(preds)
+        })
+
         df.set_index("Week", inplace=True)
 
+        st.subheader("📊 Price Trend (Weekly)")
         st.line_chart(df)
 
     else:
-        st.error("No data available")
+        st.error("No mandi data available")
 
     # 🌱 CROP ROTATION
+    st.subheader("🌱 ML Based Crop Rotation Suggestion")
+
     if prev_crop:
         crop, reason = predict_crop(prev_crop.title())
+
         st.success(f"Next Crop: {crop}")
         st.info(f"Reason: {reason}")
+    else:
+        st.info("Enter previous crop")
